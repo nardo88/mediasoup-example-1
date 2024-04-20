@@ -4,6 +4,9 @@ import { Server } from 'socket.io'
 import { createServer } from 'http'
 import mediasoup from 'mediasoup'
 
+// кодеки
+import { mediaCodecs } from './mediacodecs.js'
+
 const PORT = 5000
 const app = express()
 
@@ -32,23 +35,24 @@ server.listen(PORT, () => {
   console.log('listening on port: ' + PORT)
 })
 
-// socket.io namespace (could represent a room?)
-const peers = io.of('/mediasoup')
+// метод of позволяет создать пространство имен, для разделения логики приложения
+// по одному общему соединению (также называемому «мультиплексированием»).
+const peers = io.of('/mediasoup') // создали пространство имен для mediasoup
 
-let worker
-let router
 let producerTransport
 let consumerTransport
 let producer
 let consumer
 
+// функция создает worker который будет работать на портах 2000 - 2020
 const createWorker = async () => {
-  worker = await mediasoup.createWorker({
+  const worker = await mediasoup.createWorker({
     rtcMinPort: 2000,
     rtcMaxPort: 2020,
   })
   console.log(`worker pid ${worker.pid}`)
 
+  // если worker умрет мы останавливаем приложение
   worker.on('died', (_error) => {
     console.error('mediasoup worker has died')
     setTimeout(() => process.exit(1), 2000) // exit in 2 seconds
@@ -57,49 +61,30 @@ const createWorker = async () => {
   return worker
 }
 
-worker = createWorker()
+const worker = await createWorker()
 
-const mediaCodecs = [
-  {
-    kind: 'audio',
-    mimeType: 'audio/opus',
-    clockRate: 48000,
-    channels: 2,
-  },
-  {
-    kind: 'video',
-    mimeType: 'video/VP8',
-    clockRate: 90000,
-    parameters: {
-      'x-google-start-bitrate': 1000,
-    },
-  },
-]
-
+// слушаем подключения для выделенного пространства имен
 peers.on('connection', async (socket) => {
-  console.log('connection peer', socket.id)
+  // после успешного подключения высылаем коннекту id сокет соединения
   socket.emit('connection-success', {
     socketId: socket.id,
   })
 
+  // пишем лог в случае отключения
   socket.on('disconnect', () => {
-    // do some cleanup
     console.log('peer disconnected')
   })
 
-  // worker.createRouter(options)
-  // options = { mediaCodecs, appData }
-  // mediaCodecs -> defined above
-  // appData -> custom application data - we are not supplying any
-  // none of the two are required
-  router = await worker.createRouter({ mediaCodecs })
+  // для подключившегося клиента создаем маршрут. Параметрами передаем поддерживаемые кодеки
+  const router = await worker.createRouter({ mediaCodecs })
 
-  // Client emits a request for RTP Capabilities
+  // Клиент генерирует событие что бы Client emits a request for RTP Capabilities
   // This event responds to the request
   socket.on('getRtpCapabilities', (callback) => {
+    console.log('callback: ', typeof callback)
     const rtpCapabilities = router.rtpCapabilities
 
-    console.log('rtp Capabilities', rtpCapabilities)
+    // console.log('rtp Capabilities', rtpCapabilities)
 
     // call callback from the client and send back the rtpCapabilities
     callback({ rtpCapabilities })
