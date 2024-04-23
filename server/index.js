@@ -81,23 +81,22 @@ peers.on('connection', async (socket) => {
   // Клиент генерирует событие что бы Client emits a request for RTP Capabilities
   // This event responds to the request
   socket.on('getRtpCapabilities', (callback) => {
-    console.log('callback: ', typeof callback)
     const rtpCapabilities = router.rtpCapabilities
 
-    // console.log('rtp Capabilities', rtpCapabilities)
-
-    // call callback from the client and send back the rtpCapabilities
+    // вызываем колбек для того что бы  вернуть на клиент конфигурацию маршрутизатора (rtpCapabilities)
     callback({ rtpCapabilities })
   })
 
-  // Client emits a request to create server side Transport
-  // We need to differentiate between the producer and consumer transports
+  // На клиенте генерируется событие для создания транспорта на стороне сервера
+  // Тут нам надо разделить пользователей на продюсера (поставщика потока) и на потребителя
   socket.on('createWebRtcTransport', async ({ sender }, callback) => {
     console.log(`Is this a sender request? ${sender}`)
-    // The client indicates if it is a producer or a consumer
-    // if sender is true, indicates a producer else a consumer
-    if (sender) producerTransport = await createWebRtcTransport(callback)
-    else consumerTransport = await createWebRtcTransport(callback)
+    // с клиента должен придти флаг sender, если true - то это producer,иначе - это потребитель
+    if (sender) {
+      producerTransport = await createWebRtcTransport(callback, router) // Продюсер
+    } else {
+      consumerTransport = await createWebRtcTransport(callback, router) // Потребитель
+    }
   })
 
   // see client's socket.emit('transport-connect', ...)
@@ -188,7 +187,7 @@ peers.on('connection', async (socket) => {
   })
 })
 
-const createWebRtcTransport = async (callback) => {
+const createWebRtcTransport = async (callback, router) => {
   try {
     // https://mediasoup.org/documentation/v3/mediasoup/api/#WebRtcTransportOptions
     const webRtcTransport_options = {
@@ -202,10 +201,10 @@ const createWebRtcTransport = async (callback) => {
       enableTcp: true,
       preferUdp: true,
     }
-
     // https://mediasoup.org/documentation/v3/mediasoup/api/#router-createWebRtcTransport
-    let transport = await router.createWebRtcTransport(webRtcTransport_options)
-    console.log(`transport id: ${transport.id}`)
+    const transport = await router.createWebRtcTransport(
+      webRtcTransport_options
+    )
 
     transport.on('dtlsstatechange', (dtlsState) => {
       if (dtlsState === 'closed') {
