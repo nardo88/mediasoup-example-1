@@ -109,7 +109,7 @@ peers.on('connection', async (socket) => {
   socket.on(
     'transport-produce',
     async ({ kind, rtpParameters, appData }, callback) => {
-      // call produce based on the prameters from the client
+      // создаем инстанс продюсера, вызвав метод produce передав ему RTP параметры склиента
       producer = await producerTransport.produce({
         kind,
         rtpParameters,
